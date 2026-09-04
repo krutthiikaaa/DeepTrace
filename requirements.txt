@@ -4,6 +4,7 @@ mediapipe==0.10.14
 Pillow==10.4.0
 gradio==4.44.0
 python-dotenv==1.0.1
+PyYAML==6.0.2
 pytest==8.3.2
 ruff==0.6.4
 

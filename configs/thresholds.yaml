@@ -1,6 +1,7 @@
 high_threshold: 0.6
 low_threshold: 0.3
 margin: 0.15
+quality_gate_threshold: 0.6
 weights:
   fft: 1.0
   synthetic_vit: 1.2
