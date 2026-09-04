@@ -2,19 +2,109 @@
 Workstream A — FFT frequency-spectrum signal.
 Detects periodic checkerboard artifacts characteristic of GAN upsampling layers.
 """
-import numpy as np
+import cv2  # pyrefly: ignore [missing-import]
+import numpy as np  # pyrefly: ignore [missing-import]
 
 from shared.types import SignalResult
 
 
 def analyze(image: np.ndarray) -> SignalResult:
     """Pure function: image (BGR, np.ndarray) -> SignalResult. No side effects."""
-    raise NotImplementedError("Workstream A: implement FFT spectrum analysis")
+    try:
+        if not isinstance(image, np.ndarray) or len(image.shape) < 2:
+            raise ValueError("Invalid image format")
+
+        if len(image.shape) == 3:
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = image
+
+        h, w = gray.shape
+
+        # Compute 2D FFT and extract shifted log-magnitude spectrum
+        f = np.fft.fft2(gray)
+        fshift = np.fft.fftshift(f)
+        
+        # Add a small epsilon to avoid log(0)
+        magnitude_spectrum = 20 * np.log(np.abs(fshift) + 1e-8)
+        
+        # Analyze frequency domain for periodic peak energy
+        # We focus on the high frequencies and exclude the vertical/horizontal axes 
+        # and the DC component (center), which contain most of the natural image energy.
+        cy, cx = h // 2, w // 2
+        mask = np.ones((h, w), dtype=np.uint8)
+        
+        # Mask DC component (center)
+        r = int(min(h, w) * 0.05)
+        cv2.circle(mask, (cx, cy), r, 0, -1)
+        
+        # Mask main axes
+        axis_width = max(1, int(min(h, w) * 0.01))
+        mask[cy - axis_width:cy + axis_width, :] = 0
+        mask[:, cx - axis_width:cx + axis_width] = 0
+        
+        high_freq = magnitude_spectrum * mask
+        active_vals = high_freq[mask == 1]
+        
+        if len(active_vals) == 0:
+            return SignalResult(
+                signal_name="FFT Artifacts",
+                score=0.0,
+                applicable=False,
+                evidence_image=None,
+                note="Invalid image dimensions for frequency analysis."
+            )
+
+        # Calculate score based on anomaly ratio in high frequencies
+        mean_val = np.mean(active_vals)
+        std_val = np.std(active_vals)
+        max_peak = np.max(active_vals)
+        
+        # Anomaly ratio evaluates the prominence of the peaks
+        anomaly = (max_peak - mean_val) / (std_val + 1e-8)
+        
+        # Map this anomaly score to a 0.0 - 1.0 range
+        score = float(np.clip(anomaly / 20.0, 0.0, 1.0))
+
+        # Construct the evidence image
+        # Normalize original spectrum to 0-255 for visual rendering
+        vis_spectrum = cv2.normalize(magnitude_spectrum, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+        vis_spectrum_bgr = cv2.cvtColor(vis_spectrum, cv2.COLOR_GRAY2BGR)
+        
+        # Annotate peaks
+        if anomaly > 10.0:
+            threshold = max_peak - (std_val * 0.1)
+            peaks_y, peaks_x = np.where((high_freq >= threshold) & (mask == 1))
+            
+            for y, x in zip(peaks_y, peaks_x):
+                cv2.circle(vis_spectrum_bgr, (int(x), int(y)), radius=5, color=(0, 0, 255), thickness=1)
+
+        return SignalResult(
+            signal_name="FFT Artifacts",
+            score=score,
+            applicable=True,
+            evidence_image=vis_spectrum_bgr,
+            note=f"High-frequency peak difference: {anomaly:.1f}"
+        )
+
+    except Exception as e:
+        return SignalResult(
+            signal_name="FFT Artifacts",
+            score=0.0,
+            applicable=False,
+            evidence_image=None,
+            note=f"Failed to process: {str(e)}"
+        )
 
 
 if __name__ == "__main__":
     import sys
-    import cv2
-
-    img = cv2.imread(sys.argv[1])
-    print(analyze(img))
+    
+    if len(sys.argv) > 1:
+        img = cv2.imread(sys.argv[1])
+        if img is not None:
+            print(analyze(img))
+        else:
+            print(f"Failed to read image: {sys.argv[1]}")
+    else:
+        print("Usage: python fft_signal.py <image_path>")
