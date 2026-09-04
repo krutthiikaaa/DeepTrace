@@ -11,6 +11,9 @@ from shared.types import SignalResult
 def analyze(image: np.ndarray) -> SignalResult:
     """Pure function: image (BGR, np.ndarray) -> SignalResult. No side effects."""
     try:
+        if not isinstance(image, np.ndarray) or len(image.shape) < 2:
+            raise ValueError("Invalid image format")
+
         # 1. In-Memory Recompression
         encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 90]
         result, encimg = cv2.imencode('.jpg', image, encode_param)
@@ -48,12 +51,12 @@ def analyze(image: np.ndarray) -> SignalResult:
                 # If the max area is significantly larger than the average area, we likely have a localized anomaly
                 ratio = max_area / (avg_area + 1e-5)
                 # Map ratio to 0.0 - 1.0 (clamping at a ratio of 50 for max score)
-                score = float(min(ratio / 50.0, 1.0))
+                score = float(np.clip(ratio / 50.0, 0.0, 1.0))
             else:
                 # If there is only one blob, score based on how substantial it is relative to the image
                 img_area = image.shape[0] * image.shape[1]
                 # If the blob covers more than 1% of the image, give it a high score
-                score = float(min(max_area / (img_area * 0.01 + 1), 1.0))
+                score = float(np.clip(max_area / (img_area * 0.01 + 1), 0.0, 1.0))
         
         # 5. Evidence Image
         evidence_image = cv2.applyColorMap(amplified_gray, cv2.COLORMAP_INFERNO)
@@ -72,7 +75,7 @@ def analyze(image: np.ndarray) -> SignalResult:
             score=0.0,
             applicable=False,
             evidence_image=None,
-            note=f"ELA analysis failed: {str(e)}"
+            note=f"Failed to process: {str(e)}"
         )
 
 if __name__ == "__main__":
