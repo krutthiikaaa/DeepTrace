@@ -116,6 +116,15 @@ def aggregate(signal_results: list[SignalResult], thresholds: dict) -> dict:
             "reasons": ["Image quality gate failed: " + quality_gate_result.note],
         }
 
+    if quality_gate_result and not quality_gate_result.applicable:
+        return {
+            "verdict": UNCERTAIN,
+            "confidence": 0.0,
+            "category_scores": {},
+            "quality_gate": quality_gate_info,
+            "reasons": ["Image quality gate failed: " + quality_gate_result.note],
+        }
+
     applicable_count = sum(1 for r in category_results if r.applicable)
     if applicable_count < MIN_APPLICABLE_SIGNALS:
         return {

@@ -36,6 +36,20 @@ def test_quality_gate_failure_forces_uncertain():
     assert result["quality_gate"]["applicable"] is True
 
 
+def test_blur_quality_gate_failure_forces_uncertain():
+    # exif_blur_gate can fail soft (applicable=False, e.g. too blurry) rather
+    # than reporting a high EXIF-risk score. That must force Uncertain too,
+    # even when other signals would otherwise clear high_threshold + margin.
+    results = [
+        sr(EXIF, 0.0, applicable=False, note="image too blurry (VoL=10.4 < 100.0)"),
+        sr(FFT, 0.9),
+        sr(ELA, 0.1),
+    ]
+    result = aggregate(results, THRESHOLDS)
+    assert result["verdict"] == UNCERTAIN
+    assert result["quality_gate"]["applicable"] is False
+
+
 def test_fewer_than_two_applicable_signals_is_uncertain():
     results = [
         sr(FFT, 0.9, applicable=True),
